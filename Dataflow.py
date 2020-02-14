@@ -60,7 +60,8 @@ class Dataflow():
     def code2speaking(self, contents):
         if not isinstance(contents, pd.DataFrame):
             raise TypeError("Expected argument type <class 'pandas.core.frame.DataFrame'> but received %s." % type(contents))
-        return pd.DataFrame({self.concept_scheme[col] : [self.codelists[self.dimensions.loc[col]['Codelist']][code] for code in contents[col]] for col in contents.columns})
+        return pd.DataFrame({self.concept_scheme[col] : [self.codelists[self.dimensions.loc[col, 'Codelist']][code] for code in contents[col]] for col in contents.columns})
+        #return pd.DataFrame({self.concept_scheme[col] : [self.codelists[self.dimensions.loc[col]['Codelist']][code] for code in contents[col]] for col in contents.columns})
     
     @property
     def contents_speaking(self):
