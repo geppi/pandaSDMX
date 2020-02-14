@@ -319,10 +319,11 @@ def _maybe_convert_datetime(df, arg, obj, dsd=None):
 
     def _get_dims():
         """Return an appropriate list of dimensions."""
-        if len(obj.structured_by.dimensions.components):
-            return obj.structured_by.dimensions.components
-        elif dsd:
+        if dsd:
             return dsd.dimensions.components
+        elif len(obj.structured_by.dimensions.components):
+            return obj.structured_by.dimensions.components
+
         else:
             return []
 
