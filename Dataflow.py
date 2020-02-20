@@ -52,9 +52,21 @@ class Dataflow():
         self.concept_scheme = sdmx.to_pandas(self.struct_msg.concept_scheme[0])
         self.codelists = sdmx.to_pandas(self.struct_msg.codelist)
         
-        self.dimensions = pd.DataFrame({'Concept' : [self.concept_scheme.get(dim.id, dim.id) for dim in self.dsd.dimensions], 'Codelist' : [dim.local_representation.enumerated.id if dim.local_representation.enumerated else np.nan for dim in self.dsd.dimensions]}, index=[dim.id for dim in self.dsd.dimensions])
-        self.dimensions.index.name = 'Dimension'
-        
+        # generate the codemap for decoding dimension and attribute values to describing text
+        self.codemap = {}
+        for dim in self.dsd.dimensions.components:
+            if dim.local_representation.enumerated is None: continue
+            cl = dim.local_representation.enumerated.id
+            d = {key : value for key, value in self.codelists[cl].items()}
+            d[dim.id] = self.concept_scheme[dim.id]
+            self.codemap[dim.id] = d
+        for attr in self.dsd.attributes.components:
+            if attr.local_representation.enumerated is None: continue
+            cl = attr.local_representation.enumerated.id
+            d = {key : value for key, value in self.codelists[cl].items()}
+            d[attr.id] = self.concept_scheme[attr.id]
+            self.codemap[attr.id] = d
+                
         # our request for the data structure definition might have returned alternative dataflows for constrained datasets
         self.alt_flows = self.struct_msg.dataflow
         if len(self.alt_flows) > 1: self.has_alt_flows = True
@@ -66,16 +78,22 @@ class Dataflow():
         if self._contents is None: self._contents = self.source.series_keys(self.id)
         return sdmx.to_pandas(list(self._contents))
     
-    def code2speaking(self, contents):
-        if not isinstance(contents, pd.DataFrame):
-            raise TypeError("Expected argument type <class 'pandas.core.frame.DataFrame'> but received %s." % type(contents))
-        return pd.DataFrame({self.concept_scheme[col] : [self.codelists[self.dimensions.loc[col, 'Codelist']][code] for code in contents[col]] for col in contents.columns})
-        #return pd.DataFrame({self.concept_scheme[col] : [self.codelists[self.dimensions.loc[col]['Codelist']][code] for code in contents[col]] for col in contents.columns})
-    
+    def decode(self, dim, code=None):
+        if not isinstance(dim, str):
+            raise TypeError("Expected first argument type <class 'str'> but received %s." % type(dim))
+        if code is None: code = dim
+        elif not isinstance(code, str):
+            raise TypeError("Expected second argument type <class 'str'> but received %s." % type(code))
+        return self.codemap[dim][code]
+
     @property
-    def contents_speaking(self):
+    def contents_decoded(self):
         if self._contents is None: self._contents = self.source.series_keys(self.id)
-        return self.code2speaking(sdmx.to_pandas(list(self._contents)))
+        decoded = self.contents.copy()
+        for col in decoded.columns:
+            decoded[col] = decoded[col].map(self.codemap[col])
+        decoded.columns = decoded.columns.map({dim : self.decode(dim) for dim in self.codemap})
+        return decoded
         
     def use_flow(self, new_id):
         if new_id not in self.alt_flows:
