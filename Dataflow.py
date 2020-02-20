@@ -130,6 +130,7 @@ class DataflowDirectory():
                 except:
                     raise RuntimeError("Retrieval of dataflows for provider %s failed." % self.provider)
         self.flows = sdmx.to_pandas(self._flow_msg.dataflow)
+        self.flows.sort_index(inplace=True)
         self.selection = False
         
     def __repr__(self):
@@ -147,6 +148,7 @@ class DataflowDirectory():
     
     def reset(self):
         self.flows = sdmx.to_pandas(self._flow_msg.dataflow)
+        self.flows.sort_index(inplace=True)
         self.selection = False
         
     def get(self, flow_id=None):
