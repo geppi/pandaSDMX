@@ -9,7 +9,11 @@ import attr
 import numpy as np
 import pandas as pd
 import pandasdmx as sdmx
+import re
 
+
+# text pattern specifying weekly dates
+weekly_pattern = re.compile(r'^[0-9]{4}-W[0-9]{2}$')
 
 
 def list_providers():
@@ -57,13 +61,13 @@ class Dataflow():
         for dim in self.dsd.dimensions.components:
             if dim.local_representation.enumerated is None: continue
             cl = dim.local_representation.enumerated.id
-            d = {key : value for key, value in self.codelists[cl].items()}
+            d = self.codelists[cl].to_dict()
             d[dim.id] = self.concept_scheme[dim.id]
             self.codemap[dim.id] = d
         for attr in self.dsd.attributes.components:
             if attr.local_representation.enumerated is None: continue
             cl = attr.local_representation.enumerated.id
-            d = {key : value for key, value in self.codelists[cl].items()}
+            d = self.codelists[cl].to_dict()
             d[attr.id] = self.concept_scheme[attr.id]
             self.codemap[attr.id] = d
                 
@@ -86,14 +90,33 @@ class Dataflow():
             raise TypeError("Expected second argument type <class 'str'> but received %s." % type(code))
         return self.codemap[dim][code]
 
-    @property
-    def contents_decoded(self):
+    def contents_decoded(self, sort_by=None):
         if self._contents is None: self._contents = self.source.series_keys(self.id)
         decoded = self.contents.copy()
         for col in decoded.columns:
             decoded[col] = decoded[col].map(self.codemap[col])
         decoded.columns = decoded.columns.map({dim : self.decode(dim) for dim in self.codemap})
-        return decoded
+        if sort_by is not None:
+            if isinstance(sort_by, int): sort_by = list(sort_by)
+            if not isinstance(sort_by, list):
+                raise TypeError("Expected argument type <class 'list'> or <class 'int'> but received %s." % type(sort_by))
+            l = len(decoded.columns)
+            sort_labels = []
+            for col in sort_by:
+                if not isinstance(col, int):
+                    raise TypeError("Expected list with elements of type <class 'int'> but found an element of type %s." % type(col))
+                if col > l:
+                    ValueError("Column index out of range. Got %d but maximum value is %d." % (col, l))
+                if col < 1:
+                    ValueError("Column index out of range. Got %d but minimum value is 1." % col)
+                sort_labels.append(decoded.columns[col - 1])
+            decoded.sort_values(by=sort_labels, inplace=True)
+            col_order = list(decoded)
+            for col in sort_labels:
+                del col_order[col_order.index(col)]
+            sort_labels += col_order
+            return decoded[sort_labels]
+        else: return decoded
         
     def use_flow(self, new_id):
         if new_id not in self.alt_flows:
@@ -104,6 +127,20 @@ class Dataflow():
             self.agency = self.flow.maintainer.id
             self.name = self.flow.name.localized_default('de')
             self._contents = None
+            
+    def get(self, key_spec):
+        if isinstance(key_spec, int):
+            data_key = self.contents.iloc[key_spec].to_dict()
+        elif isinstance(key_spec, dict):
+            data_key = key_spec
+        data_msg = self.source.data(self.id, key=data_key, dsd=self.dsd)
+        try:
+            df = sdmx.to_pandas(data_msg, datetime=True, dsd=self.dsd)
+        except:
+            df = sdmx.to_pandas(data_msg, datetime=True, dsd=self.dsd, parse_time=False)
+            if data_key.get('FREQ', None) == 'W' and weekly_pattern.fullmatch(df.index[0]):
+                df.index = pd.to_datetime(df.index + '-5', format='%Y-W%W-%w')
+        return df
 
 
 @attr.s(repr=False)

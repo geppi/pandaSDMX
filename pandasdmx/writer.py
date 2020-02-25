@@ -285,7 +285,7 @@ def write_dataset(obj, attributes='', dtype=np.float64, constraint=None,
     return _maybe_convert_datetime(result, datetime, obj=obj, **kwargs)
 
 
-def _maybe_convert_datetime(df, arg, obj, dsd=None):
+def _maybe_convert_datetime(df, arg, obj, dsd=None, parse_time=True):
     """Helper for :meth:`write_dataset` to handle datetime indices.
 
     Parameters
@@ -329,10 +329,10 @@ def _maybe_convert_datetime(df, arg, obj, dsd=None):
 
     def _get_attrs():
         """Return an appropriate list of attributes."""
-        if len(obj.structured_by.attributes.components):
-            return obj.structured_by.attributes.components
-        elif dsd:
+        if dsd:
             return dsd.attributes.components
+        elif len(obj.structured_by.attributes.components):
+            return obj.structured_by.attributes.components
         else:
             return []
 
@@ -349,7 +349,7 @@ def _maybe_convert_datetime(df, arg, obj, dsd=None):
     # Unstack all but the time dimension and convert
     other_dims = list(filter(lambda d: d != param['dim'], df.index.names))
     df = df.unstack(other_dims)
-    df.index = pd.to_datetime(df.index)
+    if parse_time: df.index = pd.to_datetime(df.index)
 
     if param['freq']:
         # Determine frequency string, Dimension, or Attribute
